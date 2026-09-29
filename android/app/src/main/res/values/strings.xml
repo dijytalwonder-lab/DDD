@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Diwali Delivery Dash</string>
+    <string name="title_activity_main">Diwali Delivery Dash</string>
+    <string name="package_name">com.dijytal.diwalideliverydash</string>
+    <string name="custom_url_scheme">com.dijytal.diwalideliverydash</string>
+</resources>

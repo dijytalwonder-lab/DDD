@@ -1,0 +1,31 @@
+# dependencies / build output
+node_modules/
+dist/
+*.log
+
+# raw source art (large; optimised copies live in public/assets)
+# anchored to repo root so it does NOT match public/assets/ (case-insensitive FS)
+/Assets/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Android build outputs & machine-local files
+android/.gradle/
+android/build/
+android/app/build/
+android/capacitor-cordova-android-plugins/build/
+android/.idea/
+android/local.properties
+android/app/src/main/assets/public/
+
+# signing secrets — never commit
+keystore.properties
+android/keystore.properties
+*.jks
+*.keystore
+
+# built app packages
+*.apk
+*.aab

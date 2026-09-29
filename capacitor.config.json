@@ -1,0 +1,17 @@
+{
+  "appId": "com.dijytal.diwalideliverydash",
+  "appName": "Diwali Delivery Dash",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "backgroundColor": "#1a0f2e"
+    }
+  }
+}
