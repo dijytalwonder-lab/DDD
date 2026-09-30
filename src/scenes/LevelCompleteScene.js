@@ -174,12 +174,12 @@ export default class LevelCompleteScene extends Phaser.Scene {
                 { width: 250, height: 74, fontSize: 30 });
         }
 
-        const y = 560;
+        const y = 558;
         if (d.won) {
-            this.iconLabel(cx - 150, y, "btn_restart", 60, "Retry", () => this.go("Game", { worldId: d.worldId, levelIndex: d.levelIndex }));
-            this.iconLabel(cx + 150, y, "btn_home", 58, "Levels", () => this.go("LevelSelect", { worldId: d.worldId }));
+            this.iconLabel(cx - 150, y, "btn_restart", 78, "Retry", () => this.go("Game", { worldId: d.worldId, levelIndex: d.levelIndex }));
+            this.iconLabel(cx + 150, y, "btn_home", 78, "Levels", () => this.go("LevelSelect", { worldId: d.worldId }));
         } else {
-            this.iconLabel(cx, y, "btn_home", 58, "Levels", () => this.go("LevelSelect", { worldId: d.worldId }));
+            this.iconLabel(cx, y, "btn_home", 78, "Levels", () => this.go("LevelSelect", { worldId: d.worldId }));
         }
     }
 
