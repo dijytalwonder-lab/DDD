@@ -16,7 +16,7 @@ export const IMAGES = {
     // Scenery
     bg_village: "village_festival_bg.png",
     street_fg: "village_street_foreground.png",
-    home_bg: "HomePage1.png",
+    home_bg: "HomePage1_wide.png",   // 2.1:1 full-screen version (village extended to the edges)
 
     // Player (single-pose fallback)
     player_static: "player_diwali_delivery.png",

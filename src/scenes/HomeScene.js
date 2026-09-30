@@ -20,19 +20,15 @@ export default class HomeScene extends Phaser.Scene {
     }
 
     create() {
-        // Warm festive fill so a wide screen shows a Diwali-coloured frame at
-        // the sides instead of dark bars (the art is 3:2, screens are wider).
-        const g = this.add.graphics();
-        g.fillGradientStyle(0xe8811e, 0xe8811e, 0x7a1f0f, 0x7a1f0f, 1);
-        g.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+        // The home art is now a full-width 2.1:1 image (village extended to the
+        // edges), so it fills the whole canvas - no side frame needed.
+        this.add.image(0, 0, "home_bg").setOrigin(0, 0).setDisplaySize(GAME_WIDTH, GAME_HEIGHT);
 
-        // The 3:2 home artwork, centred and full-height. artX/artW define its
-        // rect so hit zones and counters (given as fractions of the art) land
-        // correctly whatever the canvas width.
-        const src = this.textures.get("home_bg").getSourceImage();
-        this.artW = GAME_HEIGHT * (src.width / src.height);
-        this.artX = (GAME_WIDTH - this.artW) / 2;
-        this.add.image(this.artX, 0, "home_bg").setOrigin(0, 0).setDisplaySize(this.artW, GAME_HEIGHT);
+        // The interactive content (title, buttons, HUD) lives in the centre 3:2
+        // band. artX/artW describe that band so hit zones and counters, given as
+        // fractions of it, land on the baked buttons whatever the canvas width.
+        this.artW = GAME_HEIGHT * 1.5;                 // 3:2 band = 960 px
+        this.artX = (GAME_WIDTH - this.artW) / 2;       // = 192 px inset
 
         this.buildDynamicCounters();
         this.buildHotspots();
@@ -63,10 +59,12 @@ export default class HomeScene extends Phaser.Scene {
         }).setOrigin(0.5);
 
         // Heart count sits INSIDE the red heart; the status ("Full" or the
-        // regen countdown) sits centred in the bar beside it.
-        this.heartText = this.add.text(this.nx(0.741), this.ny(0.064), "" + Save.getHearts(), {
-            fontFamily: FONT, fontSize: "26px", color: HEX.white, fontStyle: "bold",
-            stroke: "#7a0000", strokeThickness: 3
+        // regen countdown) sits centred in the bar beside it. The fractions
+        // below are the heart's measured centre in the art (blob centroid at
+        // 0.740, 0.068 of the content band) so the number reads dead-centre.
+        this.heartText = this.add.text(this.nx(0.740), this.ny(0.068), "" + Save.getHearts(), {
+            fontFamily: FONT, fontSize: "25px", color: HEX.white, fontStyle: "bold",
+            stroke: "#7a0000", strokeThickness: 4
         }).setOrigin(0.5);
         this.heartStatus = this.add.text(this.nx(0.832), cy, "Full", {
             fontFamily: FONT, fontSize: "24px", color: HEX.white, fontStyle: "bold"
