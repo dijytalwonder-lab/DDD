@@ -83,6 +83,13 @@ export const SHEETS = {
         file: "coin_sheet.png",
         frameWidth: 84,
         frameHeight: 81
+    },
+    // Dedicated run-with-tray cycle (4 frames, already faces right, cropped
+    // tight by tools/make_runner_sheet.py). Used as the main gameplay pose.
+    runner: {
+        file: "runner_diwali.png",
+        frameWidth: 235,
+        frameHeight: 300
     }
 };
 

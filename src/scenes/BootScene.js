@@ -85,6 +85,15 @@ export default class BootScene extends Phaser.Scene {
         make("p_deliver", PLAYER_ROWS.deliver, 12, 0);
         make("p_cheer", PLAYER_ROWS.cheer, 10, 2);
 
+        // Dedicated run-with-tray cycle from its own sheet (faces right).
+        if (!this.anims.exists("p_run_tray")) {
+            this.anims.create({
+                key: "p_run_tray",
+                frames: this.anims.generateFrameNumbers("runner", { start: 0, end: 3 }),
+                frameRate: 12, repeat: -1
+            });
+        }
+
         // Coin spin (single row of 8).
         if (!this.anims.exists("coin_spin")) {
             this.anims.create({

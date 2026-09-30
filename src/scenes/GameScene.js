@@ -148,15 +148,15 @@ export default class GameScene extends Phaser.Scene {
     }
 
     buildPlayer() {
-        this.player = this.add.sprite(PLAYER_X, this.playerBaseY, "player")
-            .setDepth(20).setScale(0.98).setOrigin(0.5, 0.82);
-        // The art faces left, but in landscape he runs to the right (the world
-        // scrolls left past him), so mirror him to face his direction of travel.
-        this.player.setFlipX(true);
-        // A constant slight forward lean sells the run (head ahead of the feet).
-        this.runLean = 6;
-        this.player.setAngle(this.runLean);
-        this.player.play("p_carry");
+        // Main pose: the dedicated run-with-tray sheet. It already faces right
+        // (his direction of travel) and has its own running lean, so no flip and
+        // no extra tilt. Feet sit at the bottom of the frame -> origin near 1.
+        // Scale so the character stands ~192 px tall on the road.
+        this.player = this.add.sprite(PLAYER_X, this.playerBaseY, "runner")
+            .setDepth(20).setOrigin(0.5, 0.97);
+        this.player.setScale(192 / this.player.frame.height);
+        this.runLean = 0;
+        this.player.play("p_run_tray");
         this.dustAcc = 0;
         this.playerShadow = this.add.ellipse(PLAYER_X, this.playerBaseY + 8, 72, 22, 0x000000, 0.28).setDepth(19);
         this.trayPips = this.add.container(0, 0).setDepth(21);
@@ -581,7 +581,8 @@ export default class GameScene extends Phaser.Scene {
                 o.consumed = true; o.needsDiya = false;
                 this.tray--; this.delivered++;
                 Sfx.play("deliver"); this.deliverFx(o);
-                this.player.play("p_deliver").once("animationcomplete", () => { if (!this.finished) this.player.play("p_carry"); });
+                // Quick tray-handoff pop while he keeps running past the house.
+                this.tweens.add({ targets: this.player, scaleY: this.player.scaleY * 0.92, duration: 90, yoyo: true, ease: "Quad.out" });
                 if (this.endless) {
                     this.combo = Math.min(COMBO_MAX, this.combo + 1);
                     this.maxCombo = Math.max(this.maxCombo, this.combo);
@@ -759,7 +760,8 @@ export default class GameScene extends Phaser.Scene {
             stars = 1;
             if (this.timeLeft >= this.level.star2Time) stars = 2;
             if (stars === 2 && this.collectedBonus >= this.spawnedBonus) stars = 3;
-            this.player.play("p_cheer");
+            // A happy hop on the run sheet (the win screen carries the rest).
+            this.tweens.add({ targets: this.player, y: this.player.y - 40, duration: 260, yoyo: true, ease: "Quad.out" });
             Sfx.play("win");
         } else {
             Save.loseHeart();
