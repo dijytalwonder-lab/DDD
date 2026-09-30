@@ -75,6 +75,7 @@ export default class GameScene extends Phaser.Scene {
         this.deliveryPhase = false;
         this.freezeTimer = false;  // pause the clock during the end-zone deposit
         this.scrollMul = 1;        // 1 while running, ramps to 0 at the end zone
+        this.arrived = false;      // true once the boy has stopped at the village
         this.villageHouses = [];
         this.runTime = lv.runTime || 26;
         // Carry cap: endless keeps the small tray; story lets you stock the goal
@@ -376,18 +377,24 @@ export default class GameScene extends Phaser.Scene {
         if (this.rain) { this.rain.tilePositionX += 500 * dt * this.scrollMul; this.rain.tilePositionY += 700 * dt * this.scrollMul; }
         if (this.endless) this.distance += this.speed * dt;
 
-        // running bounce - two strides per cycle, a touch higher so the legs read
-        const stride = this.elapsed * 15;
-        const lift = Math.abs(Math.sin(stride)) * 11;
-        this.player.y = this.playerBaseY - lift;
+        // running bounce - two strides per cycle, a touch higher so the legs read.
+        // Once the boy has stopped at the village he stands grounded (no bounce).
+        if (!this.arrived) {
+            const stride = this.elapsed * 15;
+            const lift = Math.abs(Math.sin(stride)) * 11;
+            this.player.y = this.playerBaseY - lift;
+            this.playerShadow.setScale(1 - lift / 48, 1 - lift / 80);
+        } else {
+            this.player.y = this.playerBaseY;
+            this.playerShadow.setScale(1, 1);
+        }
         this.playerShadow.y = this.playerBaseY + 8;
-        this.playerShadow.setScale(1 - lift / 48, 1 - lift / 80);
         this.player.setTint(this.elapsed < this.invulnUntil && Math.floor(this.elapsed * 12) % 2 ? 0x88ccff : 0xffffff);
         this.drawTrayPips();
 
         // kick up a little dust each time a foot lands (bottom of the bounce)
         this.dustAcc += dt;
-        if (this.running && !this.paused && this.dustAcc > 0.18) {
+        if (!this.deliveryPhase && this.running && !this.paused && this.dustAcc > 0.18) {
             this.dustAcc = 0;
             this.spawnDust();
         }
@@ -500,9 +507,10 @@ export default class GameScene extends Phaser.Scene {
     drawTrayPips() {
         this.trayPips.removeAll(true);
         const shown = Math.min(this.tray, 6);   // cap the floating dots; HUD has the number
+        const px = this.player.x;
         const y = this.player.y - this.player.displayHeight * 0.82 - 12;
         for (let i = 0; i < shown; i++) {
-            const dot = this.add.circle(PLAYER_X - (shown - 1) * 7 + i * 14, y, 5, COLORS.gold).setStrokeStyle(2, 0x7a3a00);
+            const dot = this.add.circle(px - (shown - 1) * 7 + i * 14, y, 5, COLORS.gold).setStrokeStyle(2, 0x7a3a00);
             this.trayPips.add(dot);
         }
     }
@@ -666,11 +674,10 @@ export default class GameScene extends Phaser.Scene {
         this.objects.getChildren().forEach((o) => {
             this.tweens.add({ targets: o, alpha: 0, duration: 500, onComplete: () => this.removeObject(o) });
         });
-        // glide the world to a stop, then reveal the waiting houses
-        this.tweens.add({
-            targets: this, scrollMul: 0, duration: 1000, ease: "Sine.inOut",
-            onComplete: () => { if (!this.finished) this.revealVillage(); }
-        });
+        // the village slides in from the end of the track while the road glides
+        // to a stop underneath - so the houses arrive rather than pop into being
+        this.tweens.add({ targets: this, scrollMul: 0, duration: 1100, ease: "Sine.inOut" });
+        this.revealVillage();
     }
 
     announceEndZone() {
@@ -682,44 +689,66 @@ export default class GameScene extends Phaser.Scene {
         Sfx.play("boost");
     }
 
-    // Lay all the houses out as a waiting village on the right, then deposit.
+    // Build the waiting village at the end of the track: the houses slide in
+    // from the right (as if the boy reached the end), and the boy walks up and
+    // stops beside them. Then the diyas are deposited.
     revealVillage() {
         const n = this.houses;
         const cols = Math.min(n, 5);
         const rows = Math.ceil(n / cols);
-        const xStart = 470, xEnd = GAME_WIDTH - 70;
+        const xEnd = GAME_WIDTH - 70;
+        const xStart = rows > 1 ? 470 : Math.max(470, xEnd - n * 150);   // single row hugs the right
         const yStart = rows > 1 ? 250 : 360, yEnd = 470;
         const cellW = (xEnd - xStart) / cols;
         const cellH = rows > 1 ? (yEnd - yStart) / (rows - 1) : 0;
         const hw = Math.min(cellW * 0.82, 150);
         const hh = hw * 0.9;
 
+        const recs = [];
+        let minX = Infinity;
         for (let i = 0; i < n; i++) {
             const r = Math.floor(i / cols), c = i % cols;
             const inRow = Math.min(cols, n - r * cols);
             const rowW = inRow * cellW;
             const rx = (xStart + xEnd) / 2 - rowW / 2 + cellW * (c + 0.5);
             const ry = rows > 1 ? yStart + cellH * r : (yStart + yEnd) / 2;
+            minX = Math.min(minX, rx);
 
             const glow = this.add.image(rx, ry, "diya_soft").setDisplaySize(hw * 1.5, hw * 1.5)
-                .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0).setDepth(14);
-            const house = this.add.image(rx, ry, "house_glow").setDisplaySize(hw, hh).setDepth(16).setScale(0);
+                .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.45).setDepth(14);
+            const house = this.add.image(rx, ry, "house_glow").setDisplaySize(hw, hh).setDepth(16);
             const label = this.add.text(rx, ry + hh * 0.62, `${this.diyasPerHouse}🪔`, {
                 fontFamily: FONT, fontSize: "22px", color: HEX.cream, fontStyle: "bold",
                 stroke: "#5a2400", strokeThickness: 4
-            }).setOrigin(0.5).setDepth(18).setAlpha(0);
+            }).setOrigin(0.5).setDepth(18);
 
-            const rec = { house, glow, label, lit: false };
+            const rec = { house, glow, label, lit: false, rx, ry };
+            recs.push(rec);
             this.villageHouses.push(rec);
-            // pop each house in with a little stagger
-            const delay = 120 + i * 90;
-            this.tweens.add({ targets: house, scaleX: hw / house.width, scaleY: hh / house.height, alpha: 1, delay, duration: 300, ease: "Back.out" });
-            this.tweens.add({ targets: glow, alpha: 0.4, delay, duration: 300 });
-            this.tweens.add({ targets: label, alpha: 1, delay, duration: 300 });
         }
 
-        // once they've settled, start depositing the collected diyas
-        this.time.delayedCall(260 + n * 90 + 300, () => { if (!this.finished) this.autoDeposit(); });
+        // slide the whole village in from just off the right edge, as one group
+        const enterDX = (GAME_WIDTH + 170) - minX;
+        for (const rec of recs) {
+            rec.house.x += enterDX; rec.glow.x += enterDX; rec.label.x += enterDX;
+            this.tweens.add({ targets: rec.house, x: rec.rx, duration: 850, ease: "Quad.out" });
+            this.tweens.add({ targets: rec.glow, x: rec.rx, duration: 850, ease: "Quad.out" });
+            this.tweens.add({ targets: rec.label, x: rec.rx, duration: 850, ease: "Quad.out" });
+        }
+
+        // walk the boy up to the village and stop him just left of the first house
+        const boyX = Math.max(320, minX - 150);
+        const boyY = rows > 1 ? (yStart + yEnd) / 2 + 40 : (yStart + yEnd) / 2 + 30;
+        this.tweens.add({ targets: this, playerBaseY: boyY, duration: 850, ease: "Quad.inOut" });
+        this.tweens.add({ targets: this.player, x: boyX, duration: 850, ease: "Quad.inOut" });
+        this.tweens.add({ targets: this.playerShadow, x: boyX, duration: 850, ease: "Quad.inOut" });
+        this.time.delayedCall(880, () => {   // stop the run: ground him and hold a frame
+            this.arrived = true;
+            if (this.player.anims) this.player.anims.pause();
+        });
+
+        // once the boy has arrived and the houses have settled, deposit
+        this.time.delayedCall(1050, () => { if (!this.finished) this.autoDeposit(); });
     }
 
     // Deposit collected diyas into the waiting houses one by one. Each house
@@ -747,7 +776,7 @@ export default class GameScene extends Phaser.Scene {
 
     // A collected diya flies from the boy to a house, which lights up.
     flyDiyaTo(rec) {
-        const d = this.add.image(PLAYER_X, this.player.y - 30, "diya").setScale(0.5).setDepth(30);
+        const d = this.add.image(this.player.x, this.player.y - 30, "diya").setScale(0.5).setDepth(30);
         this.tweens.add({
             targets: d, x: rec.house.x, y: rec.house.y, scale: 0.3, duration: 340, ease: "Quad.in",
             onComplete: () => {
