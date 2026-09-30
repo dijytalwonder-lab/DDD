@@ -20,7 +20,19 @@ export default class HomeScene extends Phaser.Scene {
     }
 
     create() {
-        this.add.image(0, 0, "home_bg").setOrigin(0, 0).setDisplaySize(GAME_WIDTH, GAME_HEIGHT);
+        // Warm festive fill so a wide screen shows a Diwali-coloured frame at
+        // the sides instead of dark bars (the art is 3:2, screens are wider).
+        const g = this.add.graphics();
+        g.fillGradientStyle(0xe8811e, 0xe8811e, 0x7a1f0f, 0x7a1f0f, 1);
+        g.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+        // The 3:2 home artwork, centred and full-height. artX/artW define its
+        // rect so hit zones and counters (given as fractions of the art) land
+        // correctly whatever the canvas width.
+        const src = this.textures.get("home_bg").getSourceImage();
+        this.artW = GAME_HEIGHT * (src.width / src.height);
+        this.artX = (GAME_WIDTH - this.artW) / 2;
+        this.add.image(this.artX, 0, "home_bg").setOrigin(0, 0).setDisplaySize(this.artW, GAME_HEIGHT);
 
         this.buildDynamicCounters();
         this.buildHotspots();
@@ -32,8 +44,8 @@ export default class HomeScene extends Phaser.Scene {
         this.input.once("pointerdown", () => Sfx.unlock());
     }
 
-    // fraction of the image -> canvas pixels
-    nx(f) { return f * GAME_WIDTH; }
+    // fraction of the ART rect -> canvas pixels
+    nx(f) { return this.artX + f * this.artW; }
     ny(f) { return f * GAME_HEIGHT; }
 
     // --- live coin + heart counters --------------------------------------
@@ -50,12 +62,14 @@ export default class HomeScene extends Phaser.Scene {
             fontFamily: FONT, fontSize: "28px", color: HEX.gold, fontStyle: "bold"
         }).setOrigin(0.5);
 
-        // Heart count + status ("Full" or the regen countdown), in the heart bar.
-        this.heartText = this.add.text(this.nx(0.800), cy, "" + Save.getHearts(), {
-            fontFamily: FONT, fontSize: "28px", color: HEX.white, fontStyle: "bold"
+        // Heart count sits INSIDE the red heart; the status ("Full" or the
+        // regen countdown) sits centred in the bar beside it.
+        this.heartText = this.add.text(this.nx(0.741), this.ny(0.064), "" + Save.getHearts(), {
+            fontFamily: FONT, fontSize: "26px", color: HEX.white, fontStyle: "bold",
+            stroke: "#7a0000", strokeThickness: 3
         }).setOrigin(0.5);
-        this.heartStatus = this.add.text(this.nx(0.862), cy, "Full", {
-            fontFamily: FONT, fontSize: "23px", color: HEX.white, fontStyle: "bold"
+        this.heartStatus = this.add.text(this.nx(0.832), cy, "Full", {
+            fontFamily: FONT, fontSize: "24px", color: HEX.white, fontStyle: "bold"
         }).setOrigin(0.5);
 
         this.refreshHearts();

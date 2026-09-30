@@ -9,7 +9,10 @@
  * everywhere.
  */
 
-export const GAME_WIDTH = 960;
+// 2.1:1 — close to modern phone landscape (~19.5:9 / 20:9), so FIT-scaling
+// leaves only a hair of letterboxing instead of wide dark bars. The home art
+// (3:2) is centred inside this width with a festive fill on the sides.
+export const GAME_WIDTH = 1344;
 export const GAME_HEIGHT = 640;
 
 export const CENTER_X = GAME_WIDTH / 2;
