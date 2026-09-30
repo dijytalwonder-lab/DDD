@@ -73,8 +73,9 @@ export default class GameScene extends Phaser.Scene {
         this.required = this.endless ? Infinity : this.houses;  // houses to light
         this.housesLit = 0;
         this.deliveryPhase = false;
-        this.spawnedHouses = 0;
-        this.housesResolved = 0;   // lit or missed
+        this.freezeTimer = false;  // pause the clock during the end-zone deposit
+        this.scrollMul = 1;        // 1 while running, ramps to 0 at the end zone
+        this.villageHouses = [];
         this.runTime = lv.runTime || 26;
         // Carry cap: endless keeps the small tray; story lets you stock the goal
         // (plus a little buffer so an unlucky puddle isn't an instant fail).
@@ -361,16 +362,17 @@ export default class GameScene extends Phaser.Scene {
 
         if (this.endless) {
             if (this.updateEndless(dt)) return;   // run ended
-        } else {
+        } else if (!this.freezeTimer) {
             this.timeLeft -= dt;
             if (this.timeLeft <= 0) { this.timeLeft = 0; this.updateHUD(); return this.endLevel(false); }
         }
 
         const stunned = this.elapsed < this.stunUntil;
         const boosting = this.elapsed < this.boostUntil;
-        const speed = stunned ? this.speed * 0.4 : this.speed * (boosting ? 1.7 : 1);
+        // scrollMul brings the world smoothly to a stop when we reach the end zone
+        const speed = (stunned ? this.speed * 0.4 : this.speed * (boosting ? 1.7 : 1)) * this.scrollMul;
         this.road.tilePositionX += speed * dt;
-        if (this.rain) { this.rain.tilePositionX += 500 * dt; this.rain.tilePositionY += 700 * dt; }
+        if (this.rain) { this.rain.tilePositionX += 500 * dt * this.scrollMul; this.rain.tilePositionY += 700 * dt * this.scrollMul; }
         if (this.endless) this.distance += this.speed * dt;
 
         // running bounce - two strides per cycle, a touch higher so the legs read
@@ -389,9 +391,9 @@ export default class GameScene extends Phaser.Scene {
             this.spawnDust();
         }
 
-        // Story: once the collecting run is done, bring on the houses to light.
+        // Story: once the collecting run is done, arrive at the end-zone village.
         if (!this.endless && !this.deliveryPhase && this.elapsed >= this.runTime) {
-            this.startDelivery();
+            this.startEndZone();
         }
 
         // spawns - collectibles/obstacles only during the run (endless: always)
@@ -417,12 +419,6 @@ export default class GameScene extends Phaser.Scene {
             if (this.endless && o.type === "house" && o.needsDiya && !o.passed && o.x < PLAYER_X - HIT_X) {
                 o.passed = true;
                 if (o.lane === this.currentLane && this.tray === 0) this.triggerGrace();
-            }
-            // story: a house that slips past unlit is a missed delivery
-            if (!this.endless && o.type === "house" && !o.lit && !o.passed && o.x < PLAYER_X - HIT_X) {
-                o.passed = true;
-                this.housesResolved++;
-                this.checkDeliveryEnd();
             }
             if (o.x < kill) this.removeObject(o);
         });
@@ -612,8 +608,9 @@ export default class GameScene extends Phaser.Scene {
                 Sfx.play("pickup"); this.popText(o.x, o.y, "+🪔", HEX.gold); this.collectFx(o);
                 break;
             case "house":
-                if (this.endless) { this.deliverEndlessHouse(o); }
-                else { this.deliverStoryHouse(o); }
+                // Only endless spawns interactive scrolling houses; story lights
+                // its end-zone village automatically (see autoDeposit).
+                if (this.endless) this.deliverEndlessHouse(o);
                 break;
             case "coin":
                 o.consumed = true; this.coins++; Sfx.play("coin");
@@ -654,101 +651,126 @@ export default class GameScene extends Phaser.Scene {
         this.popText(o.x, o.y, `x${this.combo}`, HEX.saffron);
     }
 
-    // Story delivery: a house needs diyasPerHouse to light. Deliver them all in
-    // one pass if the boy is carrying enough; otherwise nudge him to collect more.
-    deliverStoryHouse(o) {
-        if (o.lit || o.consumed) return;
-        if (this.tray < o.perHouse) {
-            if (!o.warned) { o.warned = true; this.popText(o.x, o.y - 90, `Need ${o.perHouse} 🪔`, HEX.red); }
-            return;
-        }
-        o.lit = true; o.consumed = true;
-        this.tray -= o.perHouse;
-        this.housesLit++; this.delivered = this.housesLit;
-        this.housesResolved++;
-        Sfx.play("deliver"); this.deliverFx(o);
-        this.tweens.add({ targets: this.player, scaleY: this.player.scaleY * 0.92, duration: 90, yoyo: true, ease: "Quad.out" });
-        this.popText(o.x, o.y - 100, "Lit!", HEX.gold);
-        // clear the target markers and flare the glow as a warm payoff
-        if (o.needLabel) { o.needLabel.destroy(); o.needLabel = null; }
-        if (o.arrow) { o.arrow.destroy(); o.arrow = null; }
-        if (o.glow) { this.tweens.killTweensOf(o.glow); o.glow.setAlpha(0.95); this.tweens.add({ targets: o.glow, scale: o.glow.scale * 1.25, duration: 220, yoyo: true }); }
-        this.tweens.add({ targets: o, scale: o.scale * 1.08, duration: 140, yoyo: true });
-        if (this.housesLit >= this.houses) this.time.delayedCall(350, () => this.endLevel(true));
-    }
+    // --- end-zone village (story) -----------------------------------------
+    // The run is over: the world glides to a stop at the village where ALL the
+    // houses are waiting, then the boy deposits the diyas he collected. Clearing
+    // the level depends on the TOTAL diyas collected (>= houses * diyasPerHouse),
+    // not on lane precision.
 
-    // Kick off the end-of-level delivery: stop the run spawns, announce it, and
-    // schedule the fixed row of houses to arrive one after another.
-    startDelivery() {
+    startEndZone() {
         this.deliveryPhase = true;
-        this.announceDelivery();
-        const gap = 1500;   // ms between houses arriving
-        for (let i = 0; i < this.houses; i++) {
-            this.time.delayedCall(600 + i * gap, () => {
-                if (!this.finished) this.spawnDeliveryHouse(i);
-            });
-        }
+        this.freezeTimer = true;             // the clock stops; it's resolution time
+        this.announceEndZone();
+        // fade any collectibles/obstacles still on the track so the view is clean
+        this.objects.getChildren().forEach((o) => {
+            this.tweens.add({ targets: o, alpha: 0, duration: 500, onComplete: () => this.removeObject(o) });
+        });
+        // glide the world to a stop, then reveal the waiting houses
+        this.tweens.add({
+            targets: this, scrollMul: 0, duration: 1000, ease: "Sine.inOut",
+            onComplete: () => { if (!this.finished) this.revealVillage(); }
+        });
     }
 
-    announceDelivery() {
-        const t = this.add.text(GAME_WIDTH / 2, 150, "🏠 Deliver the diyas!", {
-            fontFamily: FONT, fontSize: "34px", color: HEX.gold, fontStyle: "bold",
+    announceEndZone() {
+        const t = this.add.text(GAME_WIDTH / 2, 150, "🏡 The village — light every home!", {
+            fontFamily: FONT, fontSize: "32px", color: HEX.gold, fontStyle: "bold",
             stroke: "#5a2400", strokeThickness: 6
         }).setOrigin(0.5).setDepth(64);
-        this.tweens.add({ targets: t, alpha: 0, y: 128, delay: 1400, duration: 700, onComplete: () => t.destroy() });
+        this.tweens.add({ targets: t, alpha: 0, y: 128, delay: 1500, duration: 700, onComplete: () => t.destroy() });
         Sfx.play("boost");
     }
 
-    // A house waiting at the end, on an edge lane, needing perHouse diyas. Made
-    // to stand out clearly from the background village: big, pulled in close to
-    // the street, drawn in the foreground with a pulsing glow, a bouncing arrow
-    // pointing to its lane and a "N diya" need-tag.
-    spawnDeliveryHouse(index) {
-        const topLane = 0, botLane = this.laneRows.length - 1;
-        const lane = index % 2 === 0 ? topLane : botLane;   // alternate top/bottom
-        const top = lane === topLane;
-        const y = top ? STREET_TOP - 44 : STREET_BOTTOM + 46;
-        const x = GAME_WIDTH + 100;
+    // Lay all the houses out as a waiting village on the right, then deposit.
+    revealVillage() {
+        const n = this.houses;
+        const cols = Math.min(n, 5);
+        const rows = Math.ceil(n / cols);
+        const xStart = 470, xEnd = GAME_WIDTH - 70;
+        const yStart = rows > 1 ? 250 : 360, yEnd = 470;
+        const cellW = (xEnd - xStart) / cols;
+        const cellH = rows > 1 ? (yEnd - yStart) / (rows - 1) : 0;
+        const hw = Math.min(cellW * 0.82, 150);
+        const hh = hw * 0.9;
 
-        // glow aura so it pops off the background scenery
-        const glow = this.add.image(x, y, "diya_soft").setDisplaySize(250, 250)
-            .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.55).setDepth(14);
-        this.tweens.add({ targets: glow, alpha: 0.85, scale: glow.scale * 1.12, duration: 700, yoyo: true, repeat: -1, ease: "Sine.inOut" });
+        for (let i = 0; i < n; i++) {
+            const r = Math.floor(i / cols), c = i % cols;
+            const inRow = Math.min(cols, n - r * cols);
+            const rowW = inRow * cellW;
+            const rx = (xStart + xEnd) / 2 - rowW / 2 + cellW * (c + 0.5);
+            const ry = rows > 1 ? yStart + cellH * r : (yStart + yEnd) / 2;
 
-        const house = this.add.image(x, y, "house_glow").setDisplaySize(190, 170).setDepth(16);
-        house.type = "house";
-        house.lane = lane;
-        house.lit = false;
-        house.consumed = false;
-        house.perHouse = this.diyasPerHouse;
-        house.baseY = y;
-        house.glow = glow;
+            const glow = this.add.image(rx, ry, "diya_soft").setDisplaySize(hw * 1.5, hw * 1.5)
+                .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0).setDepth(14);
+            const house = this.add.image(rx, ry, "house_glow").setDisplaySize(hw, hh).setDepth(16).setScale(0);
+            const label = this.add.text(rx, ry + hh * 0.62, `${this.diyasPerHouse}🪔`, {
+                fontFamily: FONT, fontSize: "22px", color: HEX.cream, fontStyle: "bold",
+                stroke: "#5a2400", strokeThickness: 4
+            }).setOrigin(0.5).setDepth(18).setAlpha(0);
 
-        // "needs N diya" tag on the street side of the house
-        house.needLabel = this.add.text(x, top ? y + 104 : y - 104, `${this.diyasPerHouse}🪔`, {
-            fontFamily: FONT, fontSize: "26px", color: HEX.cream, fontStyle: "bold",
-            stroke: "#5a2400", strokeThickness: 5
-        }).setOrigin(0.5).setDepth(18);
+            const rec = { house, glow, label, lit: false };
+            this.villageHouses.push(rec);
+            // pop each house in with a little stagger
+            const delay = 120 + i * 90;
+            this.tweens.add({ targets: house, scaleX: hw / house.width, scaleY: hh / house.height, alpha: 1, delay, duration: 300, ease: "Back.out" });
+            this.tweens.add({ targets: glow, alpha: 0.4, delay, duration: 300 });
+            this.tweens.add({ targets: label, alpha: 1, delay, duration: 300 });
+        }
 
-        // bouncing arrow pointing to the house's lane
-        const ay = top ? y + 62 : y - 62;
-        const arrow = this.add.text(x, ay, top ? "▲" : "▼", {
-            fontFamily: FONT, fontSize: "34px", color: HEX.gold, fontStyle: "bold", stroke: "#5a2400", strokeThickness: 5
-        }).setOrigin(0.5).setDepth(18);
-        this.tweens.add({ targets: arrow, y: ay + (top ? -12 : 12), duration: 420, yoyo: true, repeat: -1, ease: "Sine.inOut" });
-        house.arrow = arrow;
-
-        this.objects.add(house);
-        this.spawnedHouses++;
+        // once they've settled, start depositing the collected diyas
+        this.time.delayedCall(260 + n * 90 + 300, () => { if (!this.finished) this.autoDeposit(); });
     }
 
-    // If every house has been resolved (lit or missed) and some stayed dark,
-    // the delivery is over and the level is lost.
-    checkDeliveryEnd() {
+    // Deposit collected diyas into the waiting houses one by one. Each house
+    // takes diyasPerHouse; when the stock runs short the rest stay dark.
+    autoDeposit() {
+        let i = 0;
+        const step = () => {
+            if (this.finished) return;
+            if (i >= this.villageHouses.length) return this.finishDeposit();
+            const rec = this.villageHouses[i];
+            if (this.tray >= this.diyasPerHouse) {
+                this.tray -= this.diyasPerHouse;
+                this.housesLit++; this.delivered = this.housesLit;
+                this.flyDiyaTo(rec);
+                Sfx.play("deliver");
+                this.updateHUD();
+            } else {
+                this.dimHouse(rec);      // not enough diyas - this home stays dark
+            }
+            i++;
+            this.time.delayedCall(300, step);
+        };
+        step();
+    }
+
+    // A collected diya flies from the boy to a house, which lights up.
+    flyDiyaTo(rec) {
+        const d = this.add.image(PLAYER_X, this.player.y - 30, "diya").setScale(0.5).setDepth(30);
+        this.tweens.add({
+            targets: d, x: rec.house.x, y: rec.house.y, scale: 0.3, duration: 340, ease: "Quad.in",
+            onComplete: () => {
+                d.destroy();
+                rec.lit = true;
+                if (rec.label) { rec.label.destroy(); rec.label = null; }
+                rec.glow.setAlpha(0.9);
+                this.tweens.add({ targets: rec.glow, scale: rec.glow.scale * 1.25, duration: 260, yoyo: true, repeat: 1 });
+                this.tweens.add({ targets: rec.house, scale: rec.house.scale * 1.12, duration: 150, yoyo: true });
+                this.popText(rec.house.x, rec.house.y - rec.house.displayHeight * 0.6, "Lit!", HEX.gold);
+            }
+        });
+    }
+
+    dimHouse(rec) {
+        rec.house.setTint(0x556070);
+        rec.glow.setAlpha(0.08);
+        if (rec.label) rec.label.setColor(HEX.red);
+    }
+
+    finishDeposit() {
         if (this.finished) return;
-        if (this.spawnedHouses >= this.houses && this.housesResolved >= this.houses && this.housesLit < this.houses) {
-            this.time.delayedCall(300, () => this.endLevel(false));
-        }
+        const won = this.housesLit >= this.houses;
+        this.time.delayedCall(600, () => this.endLevel(won));
     }
 
     hitObstacle(o) {
@@ -908,9 +930,9 @@ export default class GameScene extends Phaser.Scene {
         Save.addCoins(this.coins);
         if (won) Save.recordStars(this.worldId, this.levelIndex + 1, stars);
 
-        // accurate fail message: ran the clock down, or homes were left dark
+        // accurate fail message: too few diyas at the village, or ran out of time
         let failTitle = "Out of Time!";
-        if (!won && this.timeLeft > 0 && this.housesLit < this.houses) failTitle = "Some homes stayed dark!";
+        if (!won && this.deliveryPhase) failTitle = "Not enough diyas!";
 
         const levelCount = levelsForWorld(this.worldId).length;
         this.time.delayedCall(won ? 900 : 500, () => {
