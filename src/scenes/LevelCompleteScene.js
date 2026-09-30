@@ -23,19 +23,19 @@ export default class LevelCompleteScene extends Phaser.Scene {
 
         if (d.mode === "endless") { this.buildEndless(d); this.cameras.main.fadeIn(280, 10, 6, 24); return; }
 
-        this.buildMedallion(d.won, GAME_WIDTH / 2, 116);
+        this.buildMedallion(d.won, GAME_WIDTH / 2, 106);
 
-        this.add.text(GAME_WIDTH / 2, 206, d.won ? "Level Complete!" : (d.failTitle || "Out of Time!"), {
+        this.add.text(GAME_WIDTH / 2, 190, d.won ? "Level Complete!" : (d.failTitle || "Out of Time!"), {
             fontFamily: FONT, fontSize: "40px", color: d.won ? HEX.gold : HEX.red, fontStyle: "bold",
             stroke: "#5a2400", strokeThickness: 6
         }).setOrigin(0.5);
 
-        if (d.won) this.revealStars(d.stars, 274);
-        else this.add.text(GAME_WIDTH / 2, 268, `Delivered ${d.delivered} / ${d.required}`, {
+        if (d.won) this.revealStars(d.stars, 256);
+        else this.add.text(GAME_WIDTH / 2, 250, `Delivered ${d.delivered} / ${d.required}`, {
             fontFamily: FONT, fontSize: "24px", color: HEX.cream
         }).setOrigin(0.5);
 
-        this.statsPanel(d, GAME_WIDTH / 2, 388);
+        this.statsPanel(d, GAME_WIDTH / 2, 372);
         this.buildButtons(d);
 
         this.cameras.main.fadeIn(280, 10, 6, 24);
@@ -84,10 +84,10 @@ export default class LevelCompleteScene extends Phaser.Scene {
         row(16, "🪙 Coins earned", `+${d.coins}`);
         row(48, "🚩 Distance", `${(d.distanceKm || 0).toFixed(2)} km`);
 
-        // buttons
-        pillButton(this, cx, 516, "↻  RUN AGAIN", () => this.go("Game", { worldId: d.worldId, mode: "endless" }),
+        // buttons (kept within the safe bottom margin - see note in buildButtons)
+        pillButton(this, cx, 498, "↻  RUN AGAIN", () => this.go("Game", { worldId: d.worldId, mode: "endless" }),
             { width: 280, height: 66, fontSize: 26, fill: COLORS.magenta, fill2: 0xe85a8a, color: HEX.white });
-        this.iconLabel(cx, 592, "btn_home", 52, "Home", () => this.go("Home"));
+        this.iconLabel(cx, 566, "btn_home", 52, "Home", () => this.go("Home"));
     }
 
     buildMedallion(won, cx, cy) {
@@ -160,20 +160,23 @@ export default class LevelCompleteScene extends Phaser.Scene {
         const hasNext = d.levelIndex + 1 < levels.length;
         const cx = GAME_WIDTH / 2;
 
+        // Buttons sit within a safe bottom margin: with viewport-fit=cover the
+        // phone's gesture/nav bar overlays the very bottom of the canvas, so
+        // anything below ~575 can swallow taps.
         if (d.won && hasNext) {
-            pillButton(this, cx, 496, "NEXT  ▶", () => this.go("Game", { worldId: d.worldId, levelIndex: d.levelIndex + 1 }),
+            pillButton(this, cx, 470, "NEXT  ▶", () => this.go("Game", { worldId: d.worldId, levelIndex: d.levelIndex + 1 }),
                 { width: 250, height: 74, fontSize: 30 });
         } else if (d.won && !hasNext) {
-            this.add.text(cx, 486, "🎉 World Complete! 🎉", { fontFamily: FONT, fontSize: "28px", color: HEX.gold, fontStyle: "bold" }).setOrigin(0.5);
-            this.add.text(cx, 520, "More worlds coming soon", { fontFamily: FONT, fontSize: "18px", color: HEX.cream }).setOrigin(0.5).setAlpha(0.85);
+            this.add.text(cx, 462, "🎉 World Complete! 🎉", { fontFamily: FONT, fontSize: "28px", color: HEX.gold, fontStyle: "bold" }).setOrigin(0.5);
+            this.add.text(cx, 496, "More worlds coming soon", { fontFamily: FONT, fontSize: "18px", color: HEX.cream }).setOrigin(0.5).setAlpha(0.85);
         } else {
-            pillButton(this, cx, 496, "↻  RETRY", () => this.go("Game", { worldId: d.worldId, levelIndex: d.levelIndex }),
+            pillButton(this, cx, 470, "↻  RETRY", () => this.go("Game", { worldId: d.worldId, levelIndex: d.levelIndex }),
                 { width: 250, height: 74, fontSize: 30 });
         }
 
-        const y = 588;
+        const y = 560;
         if (d.won) {
-            this.iconLabel(cx - 150, y, "btn_restart", 62, "Retry", () => this.go("Game", { worldId: d.worldId, levelIndex: d.levelIndex }));
+            this.iconLabel(cx - 150, y, "btn_restart", 60, "Retry", () => this.go("Game", { worldId: d.worldId, levelIndex: d.levelIndex }));
             this.iconLabel(cx + 150, y, "btn_home", 58, "Levels", () => this.go("LevelSelect", { worldId: d.worldId }));
         } else {
             this.iconLabel(cx, y, "btn_home", 58, "Levels", () => this.go("LevelSelect", { worldId: d.worldId }));

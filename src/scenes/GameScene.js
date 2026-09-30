@@ -276,9 +276,10 @@ export default class GameScene extends Phaser.Scene {
             }
         });
 
-        // on-screen up / down buttons, stacked bottom-right
-        this.arrow(GAME_WIDTH - 66, GAME_HEIGHT - 148, "▲", () => this.moveLane(-1));
-        this.arrow(GAME_WIDTH - 66, GAME_HEIGHT - 56, "▼", () => this.moveLane(1));
+        // on-screen up / down buttons, stacked bottom-right (kept clear of the
+        // phone's gesture bar at the very bottom edge)
+        this.arrow(GAME_WIDTH - 66, GAME_HEIGHT - 168, "▲", () => this.moveLane(-1));
+        this.arrow(GAME_WIDTH - 66, GAME_HEIGHT - 78, "▼", () => this.moveLane(1));
 
         this.input.keyboard.on("keydown-UP", () => this.moveLane(-1));
         this.input.keyboard.on("keydown-DOWN", () => this.moveLane(1));
