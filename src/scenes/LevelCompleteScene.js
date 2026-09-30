@@ -23,19 +23,19 @@ export default class LevelCompleteScene extends Phaser.Scene {
 
         if (d.mode === "endless") { this.buildEndless(d); this.cameras.main.fadeIn(280, 10, 6, 24); return; }
 
-        this.buildMedallion(d.won, GAME_WIDTH / 2, 106);
+        this.buildMedallion(d.won, GAME_WIDTH / 2, 92);
 
-        this.add.text(GAME_WIDTH / 2, 190, d.won ? "Level Complete!" : (d.failTitle || "Out of Time!"), {
+        this.add.text(GAME_WIDTH / 2, 172, d.won ? "Level Complete!" : (d.failTitle || "Out of Time!"), {
             fontFamily: FONT, fontSize: "40px", color: d.won ? HEX.gold : HEX.red, fontStyle: "bold",
             stroke: "#5a2400", strokeThickness: 6
         }).setOrigin(0.5);
 
-        if (d.won) this.revealStars(d.stars, 256);
-        else this.add.text(GAME_WIDTH / 2, 250, `Delivered ${d.delivered} / ${d.required}`, {
+        if (d.won) this.revealStars(d.stars, 232);
+        else this.add.text(GAME_WIDTH / 2, 238, `Delivered ${d.delivered} / ${d.required}`, {
             fontFamily: FONT, fontSize: "24px", color: HEX.cream
         }).setOrigin(0.5);
 
-        this.statsPanel(d, GAME_WIDTH / 2, 372);
+        this.statsPanel(d, GAME_WIDTH / 2, 374);
         this.buildButtons(d);
 
         this.cameras.main.fadeIn(280, 10, 6, 24);
@@ -164,13 +164,13 @@ export default class LevelCompleteScene extends Phaser.Scene {
         // phone's gesture/nav bar overlays the very bottom of the canvas, so
         // anything below ~575 can swallow taps.
         if (d.won && hasNext) {
-            pillButton(this, cx, 470, "NEXT  ▶", () => this.go("Game", { worldId: d.worldId, levelIndex: d.levelIndex + 1 }),
+            pillButton(this, cx, 478, "NEXT  ▶", () => this.go("Game", { worldId: d.worldId, levelIndex: d.levelIndex + 1 }),
                 { width: 250, height: 74, fontSize: 30 });
         } else if (d.won && !hasNext) {
-            this.add.text(cx, 462, "🎉 World Complete! 🎉", { fontFamily: FONT, fontSize: "28px", color: HEX.gold, fontStyle: "bold" }).setOrigin(0.5);
-            this.add.text(cx, 496, "More worlds coming soon", { fontFamily: FONT, fontSize: "18px", color: HEX.cream }).setOrigin(0.5).setAlpha(0.85);
+            this.add.text(cx, 470, "🎉 World Complete! 🎉", { fontFamily: FONT, fontSize: "28px", color: HEX.gold, fontStyle: "bold" }).setOrigin(0.5);
+            this.add.text(cx, 504, "More worlds coming soon", { fontFamily: FONT, fontSize: "18px", color: HEX.cream }).setOrigin(0.5).setAlpha(0.85);
         } else {
-            pillButton(this, cx, 470, "↻  RETRY", () => this.go("Game", { worldId: d.worldId, levelIndex: d.levelIndex }),
+            pillButton(this, cx, 478, "↻  RETRY", () => this.go("Game", { worldId: d.worldId, levelIndex: d.levelIndex }),
                 { width: 250, height: 74, fontSize: 30 });
         }
 
