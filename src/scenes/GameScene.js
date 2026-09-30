@@ -62,10 +62,23 @@ export default class GameScene extends Phaser.Scene {
 
         this.tray = 0;
         this.delivered = 0;
-        this.required = lv.deliveries;
         this.coins = 0;
         this.spawnedBonus = 0;
         this.collectedBonus = 0;
+
+        // Story mode: run & collect, then light a fixed row of houses at the end.
+        this.houses = lv.houses || 0;
+        this.diyasPerHouse = lv.diyasPerHouse || 1;
+        this.diyaGoal = this.houses * this.diyasPerHouse;
+        this.required = this.endless ? Infinity : this.houses;  // houses to light
+        this.housesLit = 0;
+        this.deliveryPhase = false;
+        this.spawnedHouses = 0;
+        this.housesResolved = 0;   // lit or missed
+        this.runTime = lv.runTime || 26;
+        // Carry cap: endless keeps the small tray; story lets you stock the goal
+        // (plus a little buffer so an unlucky puddle isn't an instant fail).
+        this.trayMax = this.endless ? TRAY_MAX : this.diyaGoal + 4;
 
         this.speed = lv.speed;
         this.baseSpeed = lv.speed;
@@ -217,8 +230,11 @@ export default class GameScene extends Phaser.Scene {
         const x = 700, y = 30, w = 210, h = 12;
         g.fillStyle(0x000000, 0.35);
         g.fillRoundedRect(x, y, w, h, 6);
-        const p = Phaser.Math.Clamp(this.delivered / this.required, 0, 1);
-        g.fillStyle(COLORS.gold, 1);
+        // run phase tracks diyas collected toward the goal; delivery tracks homes lit
+        const p = this.deliveryPhase
+            ? Phaser.Math.Clamp(this.housesLit / this.houses, 0, 1)
+            : Phaser.Math.Clamp(this.diyaGoal ? this.tray / this.diyaGoal : 0, 0, 1);
+        g.fillStyle(this.deliveryPhase ? COLORS.saffron : COLORS.gold, 1);
         g.fillRoundedRect(x, y, Math.max(6, w * p), h, 6);
     }
 
@@ -236,8 +252,10 @@ export default class GameScene extends Phaser.Scene {
         const s = Math.floor(this.timeLeft % 60);
         this.timerText.setText(`${m}:${s.toString().padStart(2, "0")}`);
         this.timerText.setColor(this.timeLeft <= 10 ? HEX.red : HEX.cream);
-        this.deliverText.setText(`${this.delivered}/${this.required}`);
-        this.trayText.setText(`${this.tray}`);
+        this.deliverText.setText(`${this.housesLit}/${this.houses}`);
+        // during the run show progress toward the diya goal; during delivery just the stock
+        this.trayText.setText(this.deliveryPhase ? `${this.tray}` : `${this.tray}/${this.diyaGoal}`);
+        this.trayText.setColor(!this.deliveryPhase && this.tray >= this.diyaGoal ? HEX.gold : HEX.cream);
         this.coinText.setText(`${this.coins}`);
         this.drawProgress();
     }
@@ -371,15 +389,23 @@ export default class GameScene extends Phaser.Scene {
             this.spawnDust();
         }
 
-        // spawns
-        this.spawnAcc += dt;
-        const interval = this.level.spawnEvery / (boosting ? 1.4 : 1);
-        while (this.spawnAcc >= interval) { this.spawnAcc -= interval; this.spawnOne(); }
+        // Story: once the collecting run is done, bring on the houses to light.
+        if (!this.endless && !this.deliveryPhase && this.elapsed >= this.runTime) {
+            this.startDelivery();
+        }
+
+        // spawns - collectibles/obstacles only during the run (endless: always)
+        if (this.endless || !this.deliveryPhase) {
+            this.spawnAcc += dt;
+            const interval = this.level.spawnEvery / (boosting ? 1.4 : 1);
+            while (this.spawnAcc >= interval) { this.spawnAcc -= interval; this.spawnOne(); }
+        }
 
         // move + interact
         const kill = -110;
         this.objects.getChildren().forEach((o) => {
             o.x -= speed * dt;
+            if (o.needLabel) o.needLabel.x = o.x;
             if (o.bob) o.y = o.baseY + Math.sin((this.elapsed + o.phase) * 2) * o.bob;
             if (!o.consumed && o.lane === this.currentLane && Math.abs(o.x - PLAYER_X) < HIT_X) {
                 this.interact(o);
@@ -389,6 +415,12 @@ export default class GameScene extends Phaser.Scene {
             if (this.endless && o.type === "house" && o.needsDiya && !o.passed && o.x < PLAYER_X - HIT_X) {
                 o.passed = true;
                 if (o.lane === this.currentLane && this.tray === 0) this.triggerGrace();
+            }
+            // story: a house that slips past unlit is a missed delivery
+            if (!this.endless && o.type === "house" && !o.lit && !o.passed && o.x < PLAYER_X - HIT_X) {
+                o.passed = true;
+                this.housesResolved++;
+                this.checkDeliveryEnd();
             }
             if (o.x < kill) this.removeObject(o);
         });
@@ -468,9 +500,10 @@ export default class GameScene extends Phaser.Scene {
 
     drawTrayPips() {
         this.trayPips.removeAll(true);
+        const shown = Math.min(this.tray, 6);   // cap the floating dots; HUD has the number
         const y = this.player.y - this.player.displayHeight * 0.82 - 12;
-        for (let i = 0; i < this.tray; i++) {
-            const dot = this.add.circle(PLAYER_X - (this.tray - 1) * 7 + i * 14, y, 5, COLORS.gold).setStrokeStyle(2, 0x7a3a00);
+        for (let i = 0; i < shown; i++) {
+            const dot = this.add.circle(PLAYER_X - (shown - 1) * 7 + i * 14, y, 5, COLORS.gold).setStrokeStyle(2, 0x7a3a00);
             this.trayPips.add(dot);
         }
     }
@@ -571,25 +604,14 @@ export default class GameScene extends Phaser.Scene {
     interact(o) {
         switch (o.type) {
             case "diya":
-                if (this.tray >= TRAY_MAX) return;
+                if (this.tray >= this.trayMax) return;
                 o.consumed = true; this.tray++;
                 if (this.endless) this.cancelGrace();   // a pickup saves the run
                 Sfx.play("pickup"); this.popText(o.x, o.y, "+🪔", HEX.gold); this.collectFx(o);
                 break;
             case "house":
-                if (!o.needsDiya || this.tray <= 0) return;
-                o.consumed = true; o.needsDiya = false;
-                this.tray--; this.delivered++;
-                Sfx.play("deliver"); this.deliverFx(o);
-                // Quick tray-handoff pop while he keeps running past the house.
-                this.tweens.add({ targets: this.player, scaleY: this.player.scaleY * 0.92, duration: 90, yoyo: true, ease: "Quad.out" });
-                if (this.endless) {
-                    this.combo = Math.min(COMBO_MAX, this.combo + 1);
-                    this.maxCombo = Math.max(this.maxCombo, this.combo);
-                    this.cancelGrace();
-                    this.popText(o.x, o.y, `x${this.combo}`, HEX.saffron);
-                }
-                if (this.delivered >= this.required) this.time.delayedCall(300, () => this.endLevel(true));
+                if (this.endless) { this.deliverEndlessHouse(o); }
+                else { this.deliverStoryHouse(o); }
                 break;
             case "coin":
                 o.consumed = true; this.coins++; Sfx.play("coin");
@@ -614,6 +636,94 @@ export default class GameScene extends Phaser.Scene {
             case "obstacle":
                 this.hitObstacle(o);
                 break;
+        }
+    }
+
+    // Endless delivery: one diya per house, builds the combo (unchanged).
+    deliverEndlessHouse(o) {
+        if (!o.needsDiya || this.tray <= 0) return;
+        o.consumed = true; o.needsDiya = false;
+        this.tray--; this.delivered++;
+        Sfx.play("deliver"); this.deliverFx(o);
+        this.tweens.add({ targets: this.player, scaleY: this.player.scaleY * 0.92, duration: 90, yoyo: true, ease: "Quad.out" });
+        this.combo = Math.min(COMBO_MAX, this.combo + 1);
+        this.maxCombo = Math.max(this.maxCombo, this.combo);
+        this.cancelGrace();
+        this.popText(o.x, o.y, `x${this.combo}`, HEX.saffron);
+    }
+
+    // Story delivery: a house needs diyasPerHouse to light. Deliver them all in
+    // one pass if the boy is carrying enough; otherwise nudge him to collect more.
+    deliverStoryHouse(o) {
+        if (o.lit || o.consumed) return;
+        if (this.tray < o.perHouse) {
+            if (!o.warned) { o.warned = true; this.popText(o.x, o.y - 90, `Need ${o.perHouse} 🪔`, HEX.red); }
+            return;
+        }
+        o.lit = true; o.consumed = true;
+        this.tray -= o.perHouse;
+        this.housesLit++; this.delivered = this.housesLit;
+        this.housesResolved++;
+        Sfx.play("deliver"); this.deliverFx(o);
+        this.tweens.add({ targets: this.player, scaleY: this.player.scaleY * 0.92, duration: 90, yoyo: true, ease: "Quad.out" });
+        this.popText(o.x, o.y - 90, "Lit!", HEX.gold);
+        if (o.needLabel) { o.needLabel.destroy(); o.needLabel = null; }
+        // swap to the lit/glowing house art for a warm payoff
+        if (this.textures.exists("house_glow")) o.setTexture("house_glow");
+        this.tweens.add({ targets: o, scale: o.scale * 1.08, duration: 140, yoyo: true });
+        if (this.housesLit >= this.houses) this.time.delayedCall(350, () => this.endLevel(true));
+    }
+
+    // Kick off the end-of-level delivery: stop the run spawns, announce it, and
+    // schedule the fixed row of houses to arrive one after another.
+    startDelivery() {
+        this.deliveryPhase = true;
+        this.announceDelivery();
+        const gap = 1500;   // ms between houses arriving
+        for (let i = 0; i < this.houses; i++) {
+            this.time.delayedCall(600 + i * gap, () => {
+                if (!this.finished) this.spawnDeliveryHouse(i);
+            });
+        }
+    }
+
+    announceDelivery() {
+        const t = this.add.text(GAME_WIDTH / 2, 150, "🏠 Deliver the diyas!", {
+            fontFamily: FONT, fontSize: "34px", color: HEX.gold, fontStyle: "bold",
+            stroke: "#5a2400", strokeThickness: 6
+        }).setOrigin(0.5).setDepth(64);
+        this.tweens.add({ targets: t, alpha: 0, y: 128, delay: 1400, duration: 700, onComplete: () => t.destroy() });
+        Sfx.play("boost");
+    }
+
+    // A house waiting at the end, on an edge lane, needing perHouse diyas.
+    spawnDeliveryHouse(index) {
+        const topLane = 0, botLane = this.laneRows.length - 1;
+        const lane = index % 2 === 0 ? topLane : botLane;   // alternate top/bottom
+        const y = lane === topLane ? STREET_TOP - 80 : STREET_BOTTOM + 76;
+        const x = GAME_WIDTH + 80;
+        const house = this.add.image(x, y, this.houseTexture()).setDisplaySize(150, 134).setDepth(8);
+        house.type = "house";
+        house.lane = lane;
+        house.lit = false;
+        house.consumed = false;
+        house.perHouse = this.diyasPerHouse;
+        house.baseY = y;
+        // a small "needs N" tag above the house
+        house.needLabel = this.add.text(x, y - 84, `${this.diyasPerHouse}🪔`, {
+            fontFamily: FONT, fontSize: "24px", color: HEX.cream, fontStyle: "bold",
+            stroke: "#5a2400", strokeThickness: 4
+        }).setOrigin(0.5).setDepth(12);
+        this.objects.add(house);
+        this.spawnedHouses++;
+    }
+
+    // If every house has been resolved (lit or missed) and some stayed dark,
+    // the delivery is over and the level is lost.
+    checkDeliveryEnd() {
+        if (this.finished) return;
+        if (this.spawnedHouses >= this.houses && this.housesResolved >= this.houses && this.housesLit < this.houses) {
+            this.time.delayedCall(300, () => this.endLevel(false));
         }
     }
 
@@ -702,6 +812,7 @@ export default class GameScene extends Phaser.Scene {
 
     removeObject(o) {
         if (!o || !o.active) return;
+        if (o.needLabel) { o.needLabel.destroy(); o.needLabel = null; }
         this.objects.remove(o, true, true);
     }
 
@@ -771,6 +882,10 @@ export default class GameScene extends Phaser.Scene {
         Save.addCoins(this.coins);
         if (won) Save.recordStars(this.worldId, this.levelIndex + 1, stars);
 
+        // accurate fail message: ran the clock down, or homes were left dark
+        let failTitle = "Out of Time!";
+        if (!won && this.timeLeft > 0 && this.housesLit < this.houses) failTitle = "Some homes stayed dark!";
+
         const levelCount = levelsForWorld(this.worldId).length;
         this.time.delayedCall(won ? 900 : 500, () => {
             this.scene.start("LevelComplete", {
@@ -779,6 +894,7 @@ export default class GameScene extends Phaser.Scene {
                 levelCount,
                 won,
                 stars,
+                failTitle,
                 coins: this.coins,
                 delivered: this.delivered,
                 required: this.required,

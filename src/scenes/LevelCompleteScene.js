@@ -25,7 +25,7 @@ export default class LevelCompleteScene extends Phaser.Scene {
 
         this.buildMedallion(d.won, GAME_WIDTH / 2, 116);
 
-        this.add.text(GAME_WIDTH / 2, 206, d.won ? "Level Complete!" : "Out of Time!", {
+        this.add.text(GAME_WIDTH / 2, 206, d.won ? "Level Complete!" : (d.failTitle || "Out of Time!"), {
             fontFamily: FONT, fontSize: "40px", color: d.won ? HEX.gold : HEX.red, fontStyle: "bold",
             stroke: "#5a2400", strokeThickness: 6
         }).setOrigin(0.5);
