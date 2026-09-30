@@ -76,8 +76,8 @@ export const IMAGES = {
 export const SHEETS = {
     player: {
         file: "player_diwali_delivery_sheet.png",
-        frameWidth: 120,
-        frameHeight: 165
+        frameWidth: 128,
+        frameHeight: 176
     },
     coin_spin: {
         file: "coin_sheet.png",

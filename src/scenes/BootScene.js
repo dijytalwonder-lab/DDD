@@ -81,7 +81,7 @@ export default class BootScene extends Phaser.Scene {
         make("p_run", PLAYER_ROWS.run, 16);
         // The gameplay pose: carrying the tray while moving. Run it fast so the
         // legs read as a run rather than a stroll.
-        make("p_carry", PLAYER_ROWS.walkTray, 17);
+        make("p_carry", PLAYER_ROWS.walkTray, 20);
         make("p_deliver", PLAYER_ROWS.deliver, 12, 0);
         make("p_cheer", PLAYER_ROWS.cheer, 10, 2);
 

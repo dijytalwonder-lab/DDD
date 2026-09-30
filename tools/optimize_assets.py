@@ -120,10 +120,12 @@ def deglow(im):
     return Image.fromarray(arr, "RGBA")
 
 # Sprite sheets: (columns, rows, target frame width in px).
+# NOTE: the player sheet is keyed by the dedicated tools/key_player_sheet.py,
+# which removes the checkerboard without blowing out the eyes/tray whites the
+# way this general pass did. Do not add it back here.
 SHEETS = {
     "coin_sheet.png":               (8, 1, 84),
     "diya_pickup_sheet.png":        (6, 1, 150),
-    "player_diwali_delivery_sheet.png": (8, 6, 120),
 }
 
 # Everything else: longest side is capped at this many px.

@@ -149,11 +149,15 @@ export default class GameScene extends Phaser.Scene {
 
     buildPlayer() {
         this.player = this.add.sprite(PLAYER_X, this.playerBaseY, "player")
-            .setDepth(20).setScale(1.05).setOrigin(0.5, 0.82);
+            .setDepth(20).setScale(0.98).setOrigin(0.5, 0.82);
         // The art faces left, but in landscape he runs to the right (the world
         // scrolls left past him), so mirror him to face his direction of travel.
         this.player.setFlipX(true);
+        // A constant slight forward lean sells the run (head ahead of the feet).
+        this.runLean = 6;
+        this.player.setAngle(this.runLean);
         this.player.play("p_carry");
+        this.dustAcc = 0;
         this.playerShadow = this.add.ellipse(PLAYER_X, this.playerBaseY + 8, 72, 22, 0x000000, 0.28).setDepth(19);
         this.trayPips = this.add.container(0, 0).setDepth(21);
     }
@@ -283,8 +287,9 @@ export default class GameScene extends Phaser.Scene {
         this.currentLane = next;
         Sfx.play("tap");
         this.tweens.add({ targets: this, playerBaseY: this.laneRows[next], duration: 110, ease: "Quad.out" });
-        this.player.setAngle(dir < 0 ? -7 : 7);
-        this.tweens.add({ targets: this.player, angle: 0, duration: 180, delay: 60 });
+        // Bank into the lane change, then settle back to the running lean.
+        this.player.setAngle(this.runLean + (dir < 0 ? -11 : 11));
+        this.tweens.add({ targets: this.player, angle: this.runLean, duration: 180, delay: 60 });
     }
 
     // --- rain --------------------------------------------------------------
@@ -350,13 +355,21 @@ export default class GameScene extends Phaser.Scene {
         if (this.rain) { this.rain.tilePositionX += 500 * dt; this.rain.tilePositionY += 700 * dt; }
         if (this.endless) this.distance += this.speed * dt;
 
-        // running bounce
-        const lift = Math.abs(Math.sin(this.elapsed * 13)) * 9;
+        // running bounce - two strides per cycle, a touch higher so the legs read
+        const stride = this.elapsed * 15;
+        const lift = Math.abs(Math.sin(stride)) * 11;
         this.player.y = this.playerBaseY - lift;
         this.playerShadow.y = this.playerBaseY + 8;
-        this.playerShadow.setScale(1 - lift / 55, 1 - lift / 90);
+        this.playerShadow.setScale(1 - lift / 48, 1 - lift / 80);
         this.player.setTint(this.elapsed < this.invulnUntil && Math.floor(this.elapsed * 12) % 2 ? 0x88ccff : 0xffffff);
         this.drawTrayPips();
+
+        // kick up a little dust each time a foot lands (bottom of the bounce)
+        this.dustAcc += dt;
+        if (this.running && !this.paused && this.dustAcc > 0.18) {
+            this.dustAcc = 0;
+            this.spawnDust();
+        }
 
         // spawns
         this.spawnAcc += dt;
@@ -639,7 +652,23 @@ export default class GameScene extends Phaser.Scene {
 
     flashPlayer(color) {
         this.player.setTint(color);
-        this.tweens.add({ targets: this.player, angle: { from: -12, to: 12 }, duration: 80, yoyo: true, repeat: 2, onComplete: () => this.player.setAngle(0) });
+        this.tweens.add({ targets: this.player, angle: { from: this.runLean - 12, to: this.runLean + 12 }, duration: 80, yoyo: true, repeat: 2, onComplete: () => this.player.setAngle(this.runLean) });
+    }
+
+    // A small puff of dust kicked up behind the running feet.
+    spawnDust() {
+        const y = this.playerBaseY + 6;
+        const puff = this.add.ellipse(PLAYER_X - 26, y, 16, 9, 0xffe6b0, 0.5).setDepth(18);
+        this.tweens.add({
+            targets: puff,
+            x: PLAYER_X - 70,
+            y: y - 6,
+            scaleX: 2.2, scaleY: 2.2,
+            alpha: 0,
+            duration: 420,
+            ease: "Quad.out",
+            onComplete: () => puff.destroy()
+        });
     }
 
     // --- little effects ----------------------------------------------------
