@@ -406,6 +406,8 @@ export default class GameScene extends Phaser.Scene {
         this.objects.getChildren().forEach((o) => {
             o.x -= speed * dt;
             if (o.needLabel) o.needLabel.x = o.x;
+            if (o.glow) o.glow.x = o.x;
+            if (o.arrow) o.arrow.x = o.x;
             if (o.bob) o.y = o.baseY + Math.sin((this.elapsed + o.phase) * 2) * o.bob;
             if (!o.consumed && o.lane === this.currentLane && Math.abs(o.x - PLAYER_X) < HIT_X) {
                 this.interact(o);
@@ -666,10 +668,11 @@ export default class GameScene extends Phaser.Scene {
         this.housesResolved++;
         Sfx.play("deliver"); this.deliverFx(o);
         this.tweens.add({ targets: this.player, scaleY: this.player.scaleY * 0.92, duration: 90, yoyo: true, ease: "Quad.out" });
-        this.popText(o.x, o.y - 90, "Lit!", HEX.gold);
+        this.popText(o.x, o.y - 100, "Lit!", HEX.gold);
+        // clear the target markers and flare the glow as a warm payoff
         if (o.needLabel) { o.needLabel.destroy(); o.needLabel = null; }
-        // swap to the lit/glowing house art for a warm payoff
-        if (this.textures.exists("house_glow")) o.setTexture("house_glow");
+        if (o.arrow) { o.arrow.destroy(); o.arrow = null; }
+        if (o.glow) { this.tweens.killTweensOf(o.glow); o.glow.setAlpha(0.95); this.tweens.add({ targets: o.glow, scale: o.glow.scale * 1.25, duration: 220, yoyo: true }); }
         this.tweens.add({ targets: o, scale: o.scale * 1.08, duration: 140, yoyo: true });
         if (this.housesLit >= this.houses) this.time.delayedCall(350, () => this.endLevel(true));
     }
@@ -696,24 +699,45 @@ export default class GameScene extends Phaser.Scene {
         Sfx.play("boost");
     }
 
-    // A house waiting at the end, on an edge lane, needing perHouse diyas.
+    // A house waiting at the end, on an edge lane, needing perHouse diyas. Made
+    // to stand out clearly from the background village: big, pulled in close to
+    // the street, drawn in the foreground with a pulsing glow, a bouncing arrow
+    // pointing to its lane and a "N diya" need-tag.
     spawnDeliveryHouse(index) {
         const topLane = 0, botLane = this.laneRows.length - 1;
         const lane = index % 2 === 0 ? topLane : botLane;   // alternate top/bottom
-        const y = lane === topLane ? STREET_TOP - 80 : STREET_BOTTOM + 76;
-        const x = GAME_WIDTH + 80;
-        const house = this.add.image(x, y, this.houseTexture()).setDisplaySize(150, 134).setDepth(8);
+        const top = lane === topLane;
+        const y = top ? STREET_TOP - 44 : STREET_BOTTOM + 46;
+        const x = GAME_WIDTH + 100;
+
+        // glow aura so it pops off the background scenery
+        const glow = this.add.image(x, y, "diya_soft").setDisplaySize(250, 250)
+            .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.55).setDepth(14);
+        this.tweens.add({ targets: glow, alpha: 0.85, scale: glow.scale * 1.12, duration: 700, yoyo: true, repeat: -1, ease: "Sine.inOut" });
+
+        const house = this.add.image(x, y, "house_glow").setDisplaySize(190, 170).setDepth(16);
         house.type = "house";
         house.lane = lane;
         house.lit = false;
         house.consumed = false;
         house.perHouse = this.diyasPerHouse;
         house.baseY = y;
-        // a small "needs N" tag above the house
-        house.needLabel = this.add.text(x, y - 84, `${this.diyasPerHouse}🪔`, {
-            fontFamily: FONT, fontSize: "24px", color: HEX.cream, fontStyle: "bold",
-            stroke: "#5a2400", strokeThickness: 4
-        }).setOrigin(0.5).setDepth(12);
+        house.glow = glow;
+
+        // "needs N diya" tag on the street side of the house
+        house.needLabel = this.add.text(x, top ? y + 104 : y - 104, `${this.diyasPerHouse}🪔`, {
+            fontFamily: FONT, fontSize: "26px", color: HEX.cream, fontStyle: "bold",
+            stroke: "#5a2400", strokeThickness: 5
+        }).setOrigin(0.5).setDepth(18);
+
+        // bouncing arrow pointing to the house's lane
+        const ay = top ? y + 62 : y - 62;
+        const arrow = this.add.text(x, ay, top ? "▲" : "▼", {
+            fontFamily: FONT, fontSize: "34px", color: HEX.gold, fontStyle: "bold", stroke: "#5a2400", strokeThickness: 5
+        }).setOrigin(0.5).setDepth(18);
+        this.tweens.add({ targets: arrow, y: ay + (top ? -12 : 12), duration: 420, yoyo: true, repeat: -1, ease: "Sine.inOut" });
+        house.arrow = arrow;
+
         this.objects.add(house);
         this.spawnedHouses++;
     }
@@ -813,6 +837,8 @@ export default class GameScene extends Phaser.Scene {
     removeObject(o) {
         if (!o || !o.active) return;
         if (o.needLabel) { o.needLabel.destroy(); o.needLabel = null; }
+        if (o.glow) { o.glow.destroy(); o.glow = null; }
+        if (o.arrow) { o.arrow.destroy(); o.arrow = null; }
         this.objects.remove(o, true, true);
     }
 
